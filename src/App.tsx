@@ -27,7 +27,7 @@ const DIFFICULTY_META: Record<Difficulty, { label: string; color: string }> = {
   extreme: { label: 'Extreme', color: '#ef4444' },
 };
 
-const SPEEDS = [1, 2, 3] as const;
+const SPEEDS = [1, 2, 3, 5, 10] as const;
 
 export default function App() {
   const [selectedMap, setSelectedMap] = useState(MAPS_LIST[0]);
@@ -267,9 +267,21 @@ export default function App() {
               <Star size={16} />
               {ageDef.abilityName}
               {ui.abilityCooldown > 0 && (
-                <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-xs font-mono">
-                  {Math.ceil(ui.abilityCooldown)}s
-                </div>
+                <>
+                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-xs font-mono">
+                    {Math.ceil(ui.abilityCooldown)}s
+                  </div>
+                  <div
+                    className="absolute bottom-0 left-0 h-1 bg-rose-300 transition-all"
+                    style={{
+                      width: `${
+                        ui.abilityMaxCooldown > 0
+                          ? Math.max(0, 1 - ui.abilityCooldown / ui.abilityMaxCooldown) * 100
+                          : 0
+                      }%`,
+                    }}
+                  />
+                </>
               )}
             </button>
             <div className="text-[11px] text-slate-400 mt-1">{ageDef.abilityDescription}</div>
@@ -364,12 +376,21 @@ export default function App() {
                   const can = tech.currentRank < tech.maxRank && ui.science >= cost;
                   return (
                     <div key={tech.id} className="bg-slate-800 rounded p-2">
-                      <div className="text-xs font-semibold text-slate-200">{tech.name} <span className="text-slate-500">({tech.currentRank}/{tech.maxRank})</span></div>
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs font-semibold text-slate-200">{tech.name}</div>
+                        <div className="text-[10px] text-slate-400">{tech.currentRank}/{tech.maxRank}</div>
+                      </div>
                       <div className="text-[10px] text-slate-400">{tech.description}</div>
+                      <div className="mt-1.5 h-1.5 w-full bg-slate-700 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-sky-500 rounded-full transition-all duration-300"
+                          style={{ width: `${(tech.currentRank / tech.maxRank) * 100}%` }}
+                        />
+                      </div>
                       <button
                         onClick={() => engine.buyTech(tech.id)}
                         disabled={!can}
-                        className={`mt-1 text-[10px] px-2 py-1 rounded ${can ? 'bg-sky-700 hover:bg-sky-600 text-white' : 'bg-slate-700 text-slate-500 cursor-not-allowed'}`}
+                        className={`mt-2 text-[10px] px-2 py-1 rounded ${can ? 'bg-sky-700 hover:bg-sky-600 text-white' : 'bg-slate-700 text-slate-500 cursor-not-allowed'}`}
                       >
                         {tech.currentRank >= tech.maxRank ? 'Maxed' : `Buy (${cost} sci)`}
                       </button>
