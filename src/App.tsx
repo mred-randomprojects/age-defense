@@ -57,7 +57,10 @@ export default function App() {
     setSelectedMap(map);
     setDifficulty(diff);
     setMapPickerOpen(false);
-    engine.restart(diff);
+    // Pass the map explicitly: relying on state → prop would use the stale,
+    // previously-selected map because this renderer's `restart` closure
+    // still points at the old `selectedMap` value.
+    engine.restart(diff, map);
   };
 
   const resumeGame = () => {

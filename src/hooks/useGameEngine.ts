@@ -577,9 +577,9 @@ export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'no
     notifyUI();
   }, [notifyUI]);
 
-  const restart = useCallback((newDifficulty?: Difficulty) => {
+  const restart = useCallback((newDifficulty?: Difficulty, newMapId?: string) => {
     const diff = newDifficulty ?? stateRef.current.difficulty;
-    stateRef.current = initState(mapId, diff);
+    stateRef.current = initState(newMapId ?? mapId, diff);
     _idCounter = 0;
     try { localStorage.removeItem(SAVE_KEY); } catch { /* */ }
     notifyUI();
