@@ -237,10 +237,32 @@ function createEnemy(defId: string, pathPixels: Point[][], difficulty: Difficult
 }
 
 function spawnEnemy(state: EngineState, defId: string, pathIndex: number) {
-  const path = state.pathPixels[pathIndex];
+  // Fall back to the first path on maps with fewer paths than the wave requests.
+  const path = state.pathPixels[pathIndex] ?? state.pathPixels[0];
   if (!path || path.length === 0) return;
   const enemy = createEnemy(defId, [path], state.difficulty);
-  if (enemy) state.enemies.push(enemy);
+  if (!enemy) return;
+  // Apply per-wave escalation scaling (used by endgame waves 26+).
+  const wave = WAVES[state.waveIndex];
+  if (wave) {
+    const hpMult = wave.healthMult ?? 1;
+    if (hpMult !== 1) {
+      enemy.maxHealth = Math.floor(enemy.maxHealth * hpMult);
+      enemy.currentHealth = enemy.maxHealth;
+    }
+    const spdMult = wave.speedMult ?? 1;
+    if (spdMult !== 1) {
+      enemy.baseSpeed *= spdMult;
+      enemy.currentSpeed *= spdMult;
+    }
+    enemy.armor += wave.armorBonus ?? 0;
+    const rwMult = wave.rewardMult ?? 1;
+    if (rwMult !== 1) {
+      enemy.goldReward = Math.floor(enemy.goldReward * rwMult);
+      enemy.scienceReward = Math.floor(enemy.scienceReward * rwMult);
+    }
+  }
+  state.enemies.push(enemy);
 }
 
 function getTechMultiplier(techs: TechUpgrade[], id: string): number {

@@ -207,6 +207,11 @@ export interface WaveDefinition {
   bonusGold: number;
   bonusScience: number;
   bossWave?: boolean;
+  /** Escalation scaling for endgame waves (defaults to 1 / 0 when omitted). */
+  healthMult?: number;
+  speedMult?: number;
+  armorBonus?: number;
+  rewardMult?: number;
 }
 
 export interface TechUpgrade {
