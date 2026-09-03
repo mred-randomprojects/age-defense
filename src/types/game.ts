@@ -219,6 +219,8 @@ export interface TechUpgrade {
   statMultiplier: number;
 }
 
+export type Difficulty = 'easy' | 'normal' | 'hard' | 'extreme';
+
 export interface GameStats {
   gold: number;
   science: number;

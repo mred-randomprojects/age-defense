@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useGameEngine } from './hooks/useGameEngine';
+import { useGameEngine, HighScores } from './hooks/useGameEngine';
 import { GameCanvas } from './components/GameCanvas';
 import { TOWERS } from './data/towers';
 import { AGES, getNextAge } from './data/ages';
@@ -8,8 +8,10 @@ import { formatNumber } from './utils/gameMath';
 import {
   Heart, Coins, FlaskConical, Swords, Play, SkipForward,
   ArrowUpCircle, RotateCcw, Volume2, VolumeX,
-  Target, Crosshair, Flame, Sparkles, Star, Info
+  Target, Crosshair, Flame, Sparkles, Star, Info,
+  Zap, Gauge
 } from 'lucide-react';
+import { Difficulty } from './types/game';
 
 const MAPS_LIST = ['verdant_valley', 'twin_canyons', 'chrono_spiral'];
 const MAP_META: Record<string, { name: string; desc: string }> = {
@@ -18,14 +20,24 @@ const MAP_META: Record<string, { name: string; desc: string }> = {
   chrono_spiral: { name: 'Chrono Spiral', desc: 'Spiral maze for maximum coverage.' },
 };
 
+const DIFFICULTY_META: Record<Difficulty, { label: string; color: string }> = {
+  easy: { label: 'Easy', color: '#22c55e' },
+  normal: { label: 'Normal', color: '#38bdf8' },
+  hard: { label: 'Hard', color: '#f59e0b' },
+  extreme: { label: 'Extreme', color: '#ef4444' },
+};
+
+const SPEEDS = [1, 2, 3] as const;
+
 export default function App() {
   const [selectedMap, setSelectedMap] = useState(MAPS_LIST[0]);
+  const [difficulty, setDifficulty] = useState<Difficulty>('normal');
   const [placingTowerId, setPlacingTowerId] = useState<string | null>(null);
   const [showTech, setShowTech] = useState(false);
   const [muted, setMuted] = useState(false);
   const [mapPickerOpen, setMapPickerOpen] = useState(true);
 
-  const engine = useGameEngine(selectedMap);
+  const engine = useGameEngine(selectedMap, difficulty);
   const stateRef = engine.stateRef;
 
   const getState = useCallback(() => stateRef.current, [stateRef]);
@@ -41,10 +53,16 @@ export default function App() {
   const towersForAge = Object.values(TOWERS).filter((t) => t.age === ui.currentAge);
   const selectedTower = ui.selectedTowerId ? ui.towers.find((t) => t.id === ui.selectedTowerId) : null;
 
-  const startGame = (map: string) => {
+  const startGame = (map: string, diff: Difficulty) => {
     setSelectedMap(map);
+    setDifficulty(diff);
     setMapPickerOpen(false);
-    engine.restart();
+    engine.restart(diff);
+  };
+
+  const resumeGame = () => {
+    const ok = engine.loadSave();
+    if (ok) setMapPickerOpen(false);
   };
 
   const handleBuild = useCallback((typeId: string) => {
@@ -57,23 +75,61 @@ export default function App() {
     return ok;
   }, [engine]);
 
+  const scores: HighScores = engine.getScores();
+
   if (mapPickerOpen) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6">
         <h1 className="text-4xl font-bold mb-2 text-emerald-400">Age Defense</h1>
-        <p className="text-slate-400 mb-8 text-center max-w-md">
+        <p className="text-slate-400 mb-6 text-center max-w-md">
           An evolutionary tower defense. Advance from the Stone Age to the Cyber Future.
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-3xl">
+
+        {engine.hasSave() && (
+          <button
+            onClick={resumeGame}
+            className="mb-6 px-6 py-2.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white font-semibold flex items-center gap-2"
+          >
+            <RotateCcw size={16} /> Resume Last Run
+          </button>
+        )}
+
+        <div className="mb-4 flex flex-wrap gap-2 justify-center">
+          {(Object.keys(DIFFICULTY_META) as Difficulty[]).map((d) => (
+            <button
+              key={d}
+              onClick={() => setDifficulty(d)}
+              className={`px-3 py-1.5 rounded text-sm font-semibold border transition ${
+                difficulty === d
+                  ? 'border-white/30 bg-white/10 text-white'
+                  : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-white hover:border-slate-500'
+              }`}
+            >
+              <span style={{ color: DIFFICULTY_META[d].color }}>●</span> {DIFFICULTY_META[d].label}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-3xl mb-8">
           {MAPS_LIST.map((id) => {
             const m = MAP_META[id];
+            const sc = scores[id];
             return (
-              <button key={id} onClick={() => startGame(id)} className="bg-slate-900 border border-slate-800 hover:border-emerald-500 rounded-xl p-6 text-left transition">
+              <button key={id} onClick={() => startGame(id, difficulty)} className="bg-slate-900 border border-slate-800 hover:border-emerald-500 rounded-xl p-6 text-left transition relative">
                 <div className="text-lg font-semibold text-emerald-300 mb-1">{m.name}</div>
                 <div className="text-sm text-slate-400">{m.desc}</div>
+                {sc && (
+                  <div className="mt-3 text-[11px] text-slate-500">
+                    Best: Wave {sc.bestWave} • {formatNumber(sc.bestScore)} pts • {DIFFICULTY_META[sc.difficulty].label}
+                  </div>
+                )}
               </button>
             );
           })}
+        </div>
+
+        <div className="text-xs text-slate-600 text-center max-w-lg">
+          Select a difficulty, then pick a map. Harder modes grant tougher enemies but same rewards — pure skill test.
         </div>
       </div>
     );
@@ -96,12 +152,30 @@ export default function App() {
           <div className="flex items-center gap-1.5 text-slate-300 font-semibold">
             <Swords size={18} /> Wave {ui.currentWave}/{ui.totalWaves}
           </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="text-sm text-slate-400">Score: <span className="text-white font-mono">{formatNumber(ui.score)}</span></div>
           <div className="px-2 py-0.5 rounded text-xs font-bold" style={{ background: ageDef.themeColor + '33', color: ageDef.accentColor, border: `1px solid ${ageDef.borderColor}44` }}>
             {ageDef.name}
           </div>
+          <div className="px-2 py-0.5 rounded text-xs font-bold" style={{ color: DIFFICULTY_META[ui.difficulty].color, border: `1px solid ${DIFFICULTY_META[ui.difficulty].color}44`, background: DIFFICULTY_META[ui.difficulty].color + '22' }}>
+            {DIFFICULTY_META[ui.difficulty].label}
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          {/* Speed control */}
+          <div className="flex items-center gap-1 bg-slate-800 rounded p-0.5">
+            <Gauge size={14} className="text-slate-400 ml-1.5" />
+            {SPEEDS.map((s) => (
+              <button
+                key={s}
+                onClick={() => engine.setSpeed(s)}
+                className={`px-2 py-0.5 rounded text-xs font-bold transition ${
+                  ui.gameSpeed === s ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {s}×
+              </button>
+            ))}
+          </div>
+          <div className="text-sm text-slate-400">Score: <span className="text-white font-mono">{formatNumber(ui.score)}</span></div>
           <button onClick={toggleMute} className="p-1.5 rounded hover:bg-slate-800 text-slate-400">
             {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
           </button>
@@ -132,6 +206,7 @@ export default function App() {
             {ui.gameOver ? (
               <div className="text-center py-2">
                 <div className="text-rose-400 font-bold text-lg mb-2">Defeat</div>
+                <div className="text-sm text-slate-400 mb-3">Reached wave {ui.currentWave} on {DIFFICULTY_META[ui.difficulty].label}</div>
                 <button onClick={() => engine.restart()} className="w-full py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-semibold flex items-center justify-center gap-2">
                   <RotateCcw size={16} /> Retry
                 </button>
@@ -139,6 +214,7 @@ export default function App() {
             ) : ui.won ? (
               <div className="text-center py-2">
                 <div className="text-amber-400 font-bold text-lg mb-2">Victory!</div>
+                <div className="text-sm text-slate-400 mb-3">{formatNumber(ui.score)} points • {DIFFICULTY_META[ui.difficulty].label}</div>
                 <button onClick={() => engine.restart()} className="w-full py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-semibold flex items-center justify-center gap-2">
                   <RotateCcw size={16} /> Play Again
                 </button>
@@ -207,6 +283,17 @@ export default function App() {
                 <div className="text-[11px] text-slate-400 mb-2">
                   Invested: {formatNumber(selectedTower.totalInvested)} | Kills: {selectedTower.totalKills} | Dmg: {formatNumber(Math.floor(selectedTower.totalDamageDealt))}
                 </div>
+
+                {/* Modernize */}
+                {ui.canModernizeSelected && (
+                  <button
+                    onClick={() => engine.modernizeTower(selectedTower.id)}
+                    className="w-full py-1.5 mb-2 rounded bg-purple-700 hover:bg-purple-600 text-white text-xs font-semibold flex items-center justify-center gap-1.5"
+                  >
+                    <Zap size={12} /> Modernize ({formatNumber(ui.modernizeCost)} gold)
+                  </button>
+                )}
+
                 <button onClick={() => engine.sellTower(selectedTower.id)} className="w-full py-1.5 rounded bg-rose-800 hover:bg-rose-700 text-white text-xs font-semibold">
                   Sell (+{formatNumber(Math.floor(selectedTower.totalInvested * 0.7))} gold)
                 </button>
