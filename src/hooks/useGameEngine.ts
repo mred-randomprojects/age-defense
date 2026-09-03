@@ -60,6 +60,8 @@ export interface UIState {
   gameSpeed: number;
   canModernizeSelected: boolean;
   modernizeCost: number;
+  autoStartWaves: boolean;
+  autoWaveCountdown: number;
 }
 
 interface SpawnTask {
@@ -89,6 +91,8 @@ interface EngineState {
   abilityMaxCooldown: number;
   pathPixels: Point[][];
   difficulty: Difficulty;
+  autoStart: boolean;
+  autoWaveTimer: number;
 }
 
 interface SaveData {
@@ -107,9 +111,11 @@ interface SaveData {
   selectedTowerId: string | null;
   abilityCooldown: number;
   abilityMaxCooldown: number;
+  autoStart?: boolean;
 }
 
 const SAVE_KEY = 'age-defense-save-v1';
+const AUTO_WAVE_DELAY = 3; // seconds between auto-started waves
 const SCORES_KEY = 'age-defense-scores-v1';
 
 function initState(mapId: string, difficulty: Difficulty): EngineState {
@@ -144,6 +150,8 @@ function initState(mapId: string, difficulty: Difficulty): EngineState {
     abilityMaxCooldown: AGES.stone.abilityCooldownSec,
     pathPixels: map.paths.map((p) => pathToPixels(p)),
     difficulty,
+    autoStart: false,
+    autoWaveTimer: 0,
   };
 }
 
@@ -164,6 +172,7 @@ function serializeState(s: EngineState): SaveData {
     selectedTowerId: s.selectedTowerId,
     abilityCooldown: s.abilityCooldown,
     abilityMaxCooldown: s.abilityMaxCooldown,
+    autoStart: s.autoStart,
   };
 }
 
@@ -188,6 +197,8 @@ function deserializeState(data: SaveData): EngineState | null {
     abilityMaxCooldown: data.abilityMaxCooldown,
     pathPixels: map.paths.map((p) => pathToPixels(p)),
     difficulty: data.difficulty,
+    autoStart: data.autoStart ?? false,
+    autoWaveTimer: 0,
   };
 }
 
@@ -299,6 +310,22 @@ function towerAt(state: EngineState, col: number, row: number): TowerInstance | 
   return state.towers.find((t) => t.col === col && t.row === row) ?? null;
 }
 
+function startWaveInternal(s: EngineState) {
+  s.waveIndex++;
+  const wave = WAVES[s.waveIndex];
+  s.stats.currentWave = wave.waveNumber;
+  s.waveActive = true;
+  s.spawnTasks = wave.spawns.map((sp) => ({
+    enemyId: sp.enemyId,
+    countTotal: sp.count,
+    countSpawned: 0,
+    intervalMs: sp.intervalMs,
+    timer: 0,
+    pathIndex: sp.pathIndex,
+  }));
+  sounds.playWaveStart();
+}
+
 export interface HighScores {
   [mapId: string]: { bestWave: number; bestScore: number; difficulty: Difficulty };
 }
@@ -335,19 +362,20 @@ export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'no
   const startNextWave = useCallback(() => {
     const s = stateRef.current;
     if (s.waveActive || s.waveIndex >= WAVES.length - 1 || s.stats.lives <= 0) return;
-    s.waveIndex++;
-    const wave = WAVES[s.waveIndex];
-    s.stats.currentWave = wave.waveNumber;
-    s.waveActive = true;
-    s.spawnTasks = wave.spawns.map((sp) => ({
-      enemyId: sp.enemyId,
-      countTotal: sp.count,
-      countSpawned: 0,
-      intervalMs: sp.intervalMs,
-      timer: 0,
-      pathIndex: sp.pathIndex,
-    }));
-    sounds.playWaveStart();
+    s.autoWaveTimer = 0;
+    startWaveInternal(s);
+    persist();
+    notifyUI();
+  }, [notifyUI, persist]);
+
+  const toggleAutoStart = useCallback(() => {
+    const s = stateRef.current;
+    s.autoStart = !s.autoStart;
+    if (s.autoStart && !s.waveActive && s.waveIndex < WAVES.length - 1 && s.stats.lives > 0) {
+      s.autoWaveTimer = AUTO_WAVE_DELAY;
+    } else {
+      s.autoWaveTimer = 0;
+    }
     persist();
     notifyUI();
   }, [notifyUI, persist]);
@@ -595,6 +623,7 @@ export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'no
       if (s.spawnTasks.length === 0 && s.enemies.length === 0) {
         s.waveActive = false;
         s.waveCompleteTimer = 2;
+        if (s.autoStart && s.waveIndex < WAVES.length - 1) s.autoWaveTimer = AUTO_WAVE_DELAY;
         const wave = WAVES[s.waveIndex];
         if (wave) {
           const bountyMult = getTechMultiplier(s.techs, 'tech_bounty');
@@ -611,6 +640,19 @@ export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'no
       }
     } else if (s.waveCompleteTimer > 0) {
       s.waveCompleteTimer -= scaledDt;
+    }
+
+    // Auto-start next wave after countdown
+    if (!s.waveActive && s.autoStart && s.autoWaveTimer > 0 && s.stats.lives > 0) {
+      s.autoWaveTimer -= scaledDt;
+      if (s.autoWaveTimer <= 0) {
+        s.autoWaveTimer = 0;
+        if (s.waveIndex < WAVES.length - 1) {
+          startWaveInternal(s);
+          persist();
+          notifyUI();
+        }
+      }
     }
 
     // Win check + record score
@@ -824,6 +866,7 @@ export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'no
     buyTech,
     setTargetPriority,
     setSpeed,
+    toggleAutoStart,
     restart,
     loadSave,
     hasSave,
@@ -905,5 +948,7 @@ function buildUI(s: EngineState, speed: number): UIState {
     gameSpeed: speed,
     canModernizeSelected: canModernize && s.stats.gold >= modernizeCost,
     modernizeCost,
+    autoStartWaves: s.autoStart,
+    autoWaveCountdown: Math.max(0, s.autoWaveTimer),
   };
 }

@@ -9,7 +9,7 @@ import {
   Heart, Coins, FlaskConical, Swords, Play, SkipForward,
   ArrowUpCircle, RotateCcw, Volume2, VolumeX,
   Target, Crosshair, Flame, Sparkles, Star, Info,
-  Zap, Gauge
+  Zap, Gauge, FastForward
 } from 'lucide-react';
 import { Difficulty } from './types/game';
 
@@ -220,19 +220,36 @@ export default function App() {
                 </button>
               </div>
             ) : (
-              <div className="flex gap-2">
-                <button
-                  onClick={() => { if (!ui.isWaveActive) engine.startNextWave(); }}
-                  disabled={ui.isWaveActive}
-                  className={`flex-1 py-2 rounded font-semibold flex items-center justify-center gap-2 ${ui.isWaveActive ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`}
-                >
-                  {ui.isWaveActive ? 'Wave in progress...' : <><Play size={16} /> Start Wave</>}
-                </button>
-                {ui.isWaveActive && ui.enemiesRemaining === 0 && (
-                  <button onClick={() => engine.startNextWave()} className="px-2 rounded bg-amber-600 hover:bg-amber-500 text-white">
-                    <SkipForward size={16} />
+              <div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { if (!ui.isWaveActive) engine.startNextWave(); }}
+                    disabled={ui.isWaveActive}
+                    className={`flex-1 py-2 rounded font-semibold flex items-center justify-center gap-2 ${ui.isWaveActive ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`}
+                  >
+                    {ui.isWaveActive
+                      ? 'Wave in progress...'
+                      : ui.autoStartWaves && ui.autoWaveCountdown > 0
+                        ? <><FastForward size={16} /> Next wave in {Math.ceil(ui.autoWaveCountdown)}s</>
+                        : <><Play size={16} /> Start Wave</>}
                   </button>
-                )}
+                  {ui.isWaveActive && ui.enemiesRemaining === 0 && (
+                    <button onClick={() => engine.startNextWave()} className="px-2 rounded bg-amber-600 hover:bg-amber-500 text-white">
+                      <SkipForward size={16} />
+                    </button>
+                  )}
+                </div>
+                <button
+                  onClick={() => engine.toggleAutoStart()}
+                  className={`mt-2 w-full py-1.5 rounded text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
+                    ui.autoStartWaves
+                      ? 'bg-cyan-700 hover:bg-cyan-600 text-white'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                  }`}
+                >
+                  <FastForward size={14} />
+                  Auto-start waves: {ui.autoStartWaves ? 'ON' : 'OFF'}
+                </button>
               </div>
             )}
           </div>
