@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { interceptSave } from 'cmd-s';
 import { useGameEngine, HighScores } from './hooks/useGameEngine';
 import { GameCanvas } from './components/GameCanvas';
 import { TOWERS } from './data/towers';
@@ -67,6 +68,24 @@ export default function App() {
     const ok = engine.loadSave();
     if (ok) setMapPickerOpen(false);
   };
+
+  // ⌘S / Ctrl+S: save the run instead of the web page. The engine already
+  // writes at every wave and purchase; this writes right now. On the map
+  // picker or after a defeat there is no run to save, so only the browser's
+  // dialog is kept away.
+  const inRun = !mapPickerOpen && !ui.gameOver;
+  const save = engine.save;
+  useEffect(
+    () =>
+      interceptSave({
+        onSave: () => {
+          if (!inRun) return;
+          save();
+          return 'Game saved';
+        },
+      }),
+    [inRun, save],
+  );
 
   const handleBuild = useCallback((typeId: string) => {
     setPlacingTowerId((prev) => (prev === typeId ? null : typeId));

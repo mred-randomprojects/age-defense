@@ -892,6 +892,8 @@ export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'no
     restart,
     loadSave,
     hasSave,
+    /** Write the run to disk now, between the moments the engine does it on its own. */
+    save: persist,
     getScores,
   };
 }
