@@ -287,7 +287,8 @@ function getTowerDamage(t: TowerInstance, techs: TechUpgrade[]): number {
   const base = def.baseDamage * (1 + 0.25 * t.damageLevel);
   return base * getTechMultiplier(techs, 'tech_damage');
 }
-function getTowerRange(t: TowerInstance, techs: TechUpgrade[]): number {
+/** The range towers target with; the canvas draws the same circle. */
+export function getTowerRange(t: Pick<TowerInstance, 'typeId' | 'rangeLevel'>, techs: TechUpgrade[]): number {
   const def = TOWERS[t.typeId];
   if (!def) return 0;
   const base = def.baseRange * (1 + 0.25 * t.rangeLevel);

@@ -1,11 +1,11 @@
 import React, { useRef, useEffect, useCallback } from 'react';
-import { UIState } from '../hooks/useGameEngine';
+import { getTowerRange, UIState } from '../hooks/useGameEngine';
 import { TILE_SIZE } from '../utils/gameMath';
 import { TOWERS } from '../data/towers';
-import { EnemyInstance, TowerInstance } from '../types/game';
+import { EnemyInstance, TechUpgrade, TowerInstance } from '../types/game';
 
 interface Props {
-  getState: () => { enemies: EnemyInstance[]; towers: TowerInstance[]; projectiles: unknown[]; particles: unknown[]; floatingTexts: unknown[]; map: { cols: number; rows: number; tiles: string[][] } } | null;
+  getState: () => { enemies: EnemyInstance[]; towers: TowerInstance[]; techs: TechUpgrade[]; projectiles: unknown[]; particles: unknown[]; floatingTexts: unknown[]; map: { cols: number; rows: number; tiles: string[][] } } | null;
   ui: UIState;
   placingTowerId: string | null;
   onSelectTower: (id: string | null) => void;
@@ -87,9 +87,10 @@ export const GameCanvas: React.FC<Props> = ({ getState, ui, placingTowerId, onSe
         ctx.fillStyle = can ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)';
         ctx.fillRect(hCol * TILE_SIZE, hRow * TILE_SIZE, TILE_SIZE, TILE_SIZE);
         if (can && def) {
+          const range = getTowerRange({ typeId: placingTowerId, rangeLevel: 0 }, s.techs);
           ctx.strokeStyle = 'rgba(34,197,94,0.6)';
           ctx.beginPath();
-          ctx.arc(hCol * TILE_SIZE + TILE_SIZE / 2, hRow * TILE_SIZE + TILE_SIZE / 2, def.baseRange, 0, Math.PI * 2);
+          ctx.arc(hCol * TILE_SIZE + TILE_SIZE / 2, hRow * TILE_SIZE + TILE_SIZE / 2, range, 0, Math.PI * 2);
           ctx.stroke();
         }
       }
@@ -97,15 +98,12 @@ export const GameCanvas: React.FC<Props> = ({ getState, ui, placingTowerId, onSe
       // Selected tower range
       if (ui.selectedTowerId) {
         const st = s.towers.find((t) => t.id === ui.selectedTowerId);
-        if (st) {
-          const def = TOWERS[st.typeId];
-          if (def) {
-            ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.arc(st.x, st.y, def.baseRange * (1 + 0.25 * st.rangeLevel), 0, Math.PI * 2);
-            ctx.stroke();
-          }
+        if (st && TOWERS[st.typeId]) {
+          ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(st.x, st.y, getTowerRange(st, s.techs), 0, Math.PI * 2);
+          ctx.stroke();
         }
       }
 
