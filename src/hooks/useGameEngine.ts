@@ -182,7 +182,10 @@ function deserializeState(data: SaveData): EngineState | null {
   return {
     map,
     stats: data.stats,
-    towers: data.towers,
+    // `lastShotTime` comes from the old page's performance.now(), which
+    // restarts at 0 on every load: kept, it silences the towers for as long
+    // as that page had been open.
+    towers: data.towers.map((t) => ({ ...t, lastShotTime: 0 })),
     enemies: data.enemies,
     projectiles: data.projectiles,
     particles: data.particles,
@@ -198,7 +201,10 @@ function deserializeState(data: SaveData): EngineState | null {
     pathPixels: map.paths.map((p) => pathToPixels(p)),
     difficulty: data.difficulty,
     autoStart: data.autoStart ?? false,
-    autoWaveTimer: 0,
+    // The countdown is not saved: restart it, or auto-start stalls until the
+    // player starts a wave by hand.
+    autoWaveTimer:
+      data.autoStart && !data.waveActive && data.waveIndex < WAVES.length - 1 ? AUTO_WAVE_DELAY : 0,
   };
 }
 
@@ -579,11 +585,13 @@ export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'no
 
   const restart = useCallback((newDifficulty?: Difficulty, newMapId?: string) => {
     const diff = newDifficulty ?? stateRef.current.difficulty;
-    stateRef.current = initState(newMapId ?? mapId, diff);
+    // The map being played, not the `mapId` prop: after a resume that prop
+    // is still App's default map.
+    stateRef.current = initState(newMapId ?? stateRef.current.map.id, diff);
     _idCounter = 0;
     try { localStorage.removeItem(SAVE_KEY); } catch { /* */ }
     notifyUI();
-  }, [mapId, notifyUI]);
+  }, [notifyUI]);
 
   const loadSave = useCallback(() => {
     try {
