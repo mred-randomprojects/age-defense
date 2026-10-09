@@ -71,17 +71,16 @@ export default function App() {
 
   // ⌘S / Ctrl+S: save the run instead of the web page. The engine already
   // writes at every wave and purchase; this writes right now. On the map
-  // picker or after a defeat there is no run to save, so only the browser's
-  // dialog is kept away.
-  const inRun = !mapPickerOpen && !ui.gameOver;
+  // picker or once the run is won or lost there is no run to save, so only
+  // the browser's dialog is kept away.
+  const inRun = !mapPickerOpen && !ui.gameOver && !ui.won;
   const save = engine.save;
   useEffect(
     () =>
       interceptSave({
         onSave: () => {
           if (!inRun) return;
-          save();
-          return 'Game saved';
+          return save() ? 'Game saved' : 'Could not save: browser storage is full';
         },
       }),
     [inRun, save],

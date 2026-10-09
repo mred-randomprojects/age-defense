@@ -93,6 +93,8 @@ interface EngineState {
   difficulty: Difficulty;
   autoStart: boolean;
   autoWaveTimer: number;
+  /** Won or lost: the score is recorded, the save is gone and the run is no longer saved. */
+  finished: boolean;
 }
 
 interface SaveData {
@@ -152,6 +154,7 @@ function initState(mapId: string, difficulty: Difficulty): EngineState {
     difficulty,
     autoStart: false,
     autoWaveTimer: 0,
+    finished: false,
   };
 }
 
@@ -205,6 +208,7 @@ function deserializeState(data: SaveData): EngineState | null {
     // player starts a wave by hand.
     autoWaveTimer:
       data.autoStart && !data.waveActive && data.waveIndex < WAVES.length - 1 ? AUTO_WAVE_DELAY : 0,
+    finished: false,
   };
 }
 
@@ -369,10 +373,17 @@ export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'no
     setUi(buildUI(stateRef.current, speedRef.current));
   }, []);
 
-  const persist = useCallback(() => {
+  /** Write the run. False only when the browser refused the write (storage full or blocked). */
+  const persist = useCallback((): boolean => {
+    const s = stateRef.current;
+    // A finished run is not saved: Resume is for runs that can go on.
+    if (s.finished) return true;
     try {
-      localStorage.setItem(SAVE_KEY, JSON.stringify(serializeState(stateRef.current)));
-    } catch { /* storage full or unavailable */ }
+      localStorage.setItem(SAVE_KEY, JSON.stringify(serializeState(s)));
+      return true;
+    } catch {
+      return false;
+    }
   }, []);
 
   const recordScore = useCallback((map: string, wave: number, score: number, diff: Difficulty) => {
@@ -386,6 +397,14 @@ export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'no
       }
     } catch { /* ignore */ }
   }, []);
+
+  /** Once per run, on victory or defeat: record the score and drop the save. */
+  const finishRun = useCallback((s: EngineState) => {
+    if (s.finished) return;
+    s.finished = true;
+    recordScore(s.map.id, s.stats.currentWave, s.stats.score, s.difficulty);
+    try { localStorage.removeItem(SAVE_KEY); } catch { /* storage unavailable */ }
+  }, [recordScore]);
 
   const startNextWave = useCallback(() => {
     const s = stateRef.current;
@@ -628,7 +647,10 @@ export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'no
   // Main update loop
   const update = useCallback((dt: number) => {
     const s = stateRef.current;
-    if (s.stats.lives <= 0) return;
+    if (s.stats.lives <= 0) {
+      finishRun(s); // a lost run loaded from an older save
+      return;
+    }
 
     const scaledDt = dt * speedRef.current;
 
@@ -685,10 +707,9 @@ export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'no
       }
     }
 
-    // Win check + record score
+    // Win check
     if (!s.waveActive && s.waveIndex >= WAVES.length - 1 && s.enemies.length === 0 && s.stats.lives > 0) {
-      recordScore(s.map.id, s.stats.currentWave, s.stats.score, s.difficulty);
-      persist();
+      finishRun(s);
     }
 
     // Ability cooldown
@@ -739,8 +760,7 @@ export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'no
         sounds.playLifeLost();
         addParticle(s, e.x, e.y, '#ef4444', 8);
         if (s.stats.lives <= 0) {
-          recordScore(s.map.id, s.stats.currentWave, s.stats.score, s.difficulty);
-          persist();
+          finishRun(s);
           notifyUI();
           return;
         }
@@ -879,7 +899,7 @@ export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'no
       uiTimerRef.current = 0.25;
       notifyUI();
     }
-  }, [notifyUI, persist, recordScore]);
+  }, [notifyUI, persist, finishRun]);
 
   return {
     stateRef,
@@ -900,7 +920,10 @@ export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'no
     restart,
     loadSave,
     hasSave,
-    /** Write the run to disk now, between the moments the engine does it on its own. */
+    /**
+     * Write the run to disk now, between the moments the engine does it on its
+     * own. False when the browser refused the write.
+     */
     save: persist,
     getScores,
   };

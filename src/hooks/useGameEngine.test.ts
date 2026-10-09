@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clock, installTestEnvironment, mountEngine, runFrames } from '../test/engineHarness';
+import { WAVES } from '../data/waves';
 
 vi.mock('react', () => import('../test/fakeReact'));
 
@@ -92,5 +93,62 @@ describe('save and resume', () => {
     expect(after.loadSave()).toBe(true);
     runFrames(after, 5);
     expect(after.stateRef.current.waveIndex).toBe(0);
+  });
+});
+
+describe('saving', () => {
+  const SAVE_KEY = 'age-defense-save-v1';
+  const SCORES_KEY = 'age-defense-scores-v1';
+
+  it('reports whether the write landed', () => {
+    const engine = mountEngine();
+    expect(engine.save()).toBe(true);
+    expect(engine.hasSave()).toBe(true);
+
+    vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    });
+    expect(engine.save()).toBe(false);
+  });
+
+  it('a won run records its score once, drops the save and stops saving', () => {
+    const engine = mountEngine('twin_canyons');
+    engine.save();
+    // Every wave fought and nothing left on the field.
+    const s = engine.stateRef.current;
+    s.waveIndex = WAVES.length - 1;
+    s.stats.currentWave = WAVES.length;
+    s.stats.score = 1234;
+    const writes = vi.spyOn(localStorage, 'setItem');
+
+    runFrames(engine, 2);
+
+    const keysWritten = writes.mock.calls.map(([key]) => key);
+    expect(keysWritten.filter((k) => k === SCORES_KEY)).toHaveLength(1);
+    expect(keysWritten.filter((k) => k === SAVE_KEY)).toHaveLength(0);
+    expect(engine.hasSave()).toBe(false);
+    expect(engine.getScores().twin_canyons).toEqual({ bestWave: WAVES.length, bestScore: 1234, difficulty: 'normal' });
+
+    // ⌘S on the Victory panel does not bring the finished run back.
+    engine.save();
+    expect(engine.hasSave()).toBe(false);
+  });
+
+  it('a lost run records its score and drops the save', () => {
+    const engine = mountEngine();
+    engine.startNextWave(); // saves the run
+    runFrames(engine, 0.1);
+    const s = engine.stateRef.current;
+    expect(s.enemies.length).toBeGreaterThan(0);
+    s.stats.lives = 1;
+    s.stats.score = 99;
+    const intruder = s.enemies[0];
+    intruder.pathIndex = intruder.pathCoords.length - 1; // at the gate
+
+    runFrames(engine, 0.1);
+
+    expect(s.stats.lives).toBe(0);
+    expect(engine.hasSave()).toBe(false);
+    expect(engine.getScores().verdant_valley?.bestScore).toBe(99);
   });
 });
