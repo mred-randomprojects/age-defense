@@ -1,7 +1,7 @@
 import { vi } from 'vitest';
 import { useGameEngine } from '../hooks/useGameEngine';
 import { sounds } from '../utils/audio';
-import { Difficulty } from '../types/game';
+import { Difficulty, EnemyInstance } from '../types/game';
 
 // Runs the real game engine headless. A test file using it must first replace
 // React, since the engine is a hook:
@@ -66,4 +66,37 @@ export function runFrames(engine: Engine, seconds: number, fps = 60): void {
     clock.now += dt * 1000;
     engine.update(dt);
   }
+}
+
+/** A target that stands still at (x, y), has no armor and never dies. */
+export function placeDummy(engine: Engine, x: number, y: number): EnemyInstance {
+  const dummy: EnemyInstance = {
+    id: 'dummy',
+    defId: 'cave_crawler',
+    name: 'Training dummy',
+    x,
+    y,
+    currentHealth: 1e9,
+    maxHealth: 1e9,
+    baseSpeed: 0,
+    currentSpeed: 0,
+    armor: 0,
+    goldReward: 0,
+    scienceReward: 0,
+    radius: 12,
+    color: '#ffffff',
+    outlineColor: '#000000',
+    isBoss: false,
+    shape: 'circle',
+    // Two points, so it never counts as having reached the base.
+    pathCoords: [{ x, y }, { x: x + 1, y }],
+    pathIndex: 0,
+    distanceTraveled: 0,
+    slowTimeRemaining: 0,
+    slowMultiplier: 1,
+    burnTimeRemaining: 0,
+    burnDps: 0,
+  };
+  engine.stateRef.current.enemies.push(dummy);
+  return dummy;
 }

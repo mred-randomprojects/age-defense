@@ -2,7 +2,7 @@ import { useRef, useCallback, useState } from 'react';
 import {
   AgeId, Difficulty, EnemyInstance, FloatingTextInstance, GameStats,
   MapDefinition, ParticleInstance, Point, ProjectileInstance,
-  TargetPriority, TechUpgrade, TowerInstance,
+  TargetPriority, TechUpgrade, TowerDefinition, TowerInstance,
 } from '../types/game';
 import { AGES, getNextAge } from '../data/ages';
 import { TOWERS } from '../data/towers';
@@ -185,10 +185,9 @@ function deserializeState(data: SaveData): EngineState | null {
   return {
     map,
     stats: data.stats,
-    // `lastShotTime` comes from the old page's performance.now(), which
-    // restarts at 0 on every load: kept, it silences the towers for as long
-    // as that page had been open.
-    towers: data.towers.map((t) => ({ ...t, lastShotTime: 0 })),
+    // Cooldowns restart on load. Saves from before they ran on game time
+    // carry `lastShotTime` instead, the old page's performance.now().
+    towers: data.towers.map((t) => ({ ...t, cooldownRemaining: 0 })),
     enemies: data.enemies,
     projectiles: data.projectiles,
     particles: data.particles,
@@ -443,7 +442,7 @@ export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'no
       id: uid(), typeId, age: def.age, col, row, x: pos.x, y: pos.y,
       level: 1, damageLevel: 0, rangeLevel: 0, speedLevel: 0,
       totalDamageDealt: 0, totalKills: 0,
-      targetPriority: 'first', lastShotTime: 0, angle: 0,
+      targetPriority: 'first', cooldownRemaining: 0, angle: 0,
       totalInvested: def.cost,
     };
     s.towers.push(t);
@@ -740,20 +739,28 @@ export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'no
       }
 
       if (e.pathIndex < e.pathCoords.length - 1) {
-        const target = e.pathCoords[e.pathIndex + 1];
-        const dx = target.x - e.x;
-        const dy = target.y - e.y;
-        const d = Math.sqrt(dx * dx + dy * dy);
-        const step = e.currentSpeed * scaledDt;
-        if (step >= d) {
-          e.x = target.x;
-          e.y = target.y;
-          e.pathIndex++;
-        } else {
-          e.x += (dx / d) * step;
-          e.y += (dy / d) * step;
+        // Walk the whole step, past as many waypoints as it reaches. Stopping
+        // at each one dropped the rest of the step, so enemies were slower on
+        // winding paths at high speed and at low frame rates.
+        let step = e.currentSpeed * scaledDt;
+        while (step > 0 && e.pathIndex < e.pathCoords.length - 1) {
+          const target = e.pathCoords[e.pathIndex + 1];
+          const dx = target.x - e.x;
+          const dy = target.y - e.y;
+          const d = Math.sqrt(dx * dx + dy * dy);
+          if (step >= d) {
+            e.x = target.x;
+            e.y = target.y;
+            e.pathIndex++;
+            e.distanceTraveled += d;
+            step -= d;
+          } else {
+            e.x += (dx / d) * step;
+            e.y += (dy / d) * step;
+            e.distanceTraveled += step;
+            step = 0;
+          }
         }
-        e.distanceTraveled += step;
       } else {
         s.stats.lives -= e.isBoss ? 5 : 1;
         s.stats.lives = Math.max(0, s.stats.lives);
@@ -781,49 +788,30 @@ export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'no
       }
     }
 
-    // Tower targeting & firing
-    const now = performance.now();
+    // Tower targeting & firing. Cooldowns run on game time, so fast-forward
+    // speeds up firing along with everything else, and a tower owed several
+    // shots in one frame (high speed, low frame rate) fires them all.
     for (const t of s.towers) {
       const def = TOWERS[t.typeId];
       if (!def) continue;
-      const fireRate = getTowerFireRate(t, s.techs);
-      const cooldownMs = 1000 / fireRate;
-      if (now - t.lastShotTime < cooldownMs) continue;
+      t.cooldownRemaining -= scaledDt;
+      if (t.cooldownRemaining > 0) continue;
 
+      const cooldown = 1 / getTowerFireRate(t, s.techs);
       const range = getTowerRange(t, s.techs);
-      const target = findTarget(t, s.enemies, range);
-      if (target) {
-        t.lastShotTime = now;
-        const dx = target.x - t.x;
-        const dy = target.y - t.y;
-        t.angle = Math.atan2(dy, dx);
-        const dmg = getTowerDamage(t, s.techs);
-        const isCrit = Math.random() < def.criticalChance;
-        const finalDmg = isCrit ? dmg * def.criticalMultiplier : dmg;
-
-        const proj: ProjectileInstance = {
-          id: uid(),
-          x: t.x, y: t.y,
-          startX: t.x, startY: t.y,
-          targetEnemyId: target.id,
-          targetX: target.x, targetY: target.y,
-          speed: def.projectileSpeed,
-          damage: finalDmg,
-          projectileType: def.projectileType,
-          splashRadius: def.splashRadius,
-          slowDurationSec: def.slowDurationSec,
-          slowMultiplier: def.slowMultiplier,
-          color: def.accentColor,
-          radius: def.splashRadius > 0 ? 5 : 3,
-          pierceRemaining: def.pierceCount,
-          piercedEnemyIds: [],
-          maxRange: range * 1.5,
-          distanceTraveled: 0,
-          critical: isCrit,
-        };
-        s.projectiles.push(proj);
-        sounds.playShoot(def.projectileType);
+      let fired = false;
+      while (t.cooldownRemaining <= 0) {
+        const target = findTarget(t, s.enemies, range);
+        if (!target) {
+          t.cooldownRemaining = 0; // ready, without banking shots while idle
+          break;
+        }
+        fireProjectile(s, t, def, target, range);
+        t.cooldownRemaining += cooldown;
+        fired = true;
       }
+      // One sound per tower per frame: shots fired together would only stack.
+      if (fired) sounds.playShoot(def.projectileType);
     }
 
     // Update projectiles
@@ -840,18 +828,19 @@ export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'no
       const step = p.speed * scaledDt;
 
       if (step >= d || d < 8) {
-        if (targetEnemy && distXY(p.x, p.y, targetEnemy.x, targetEnemy.y) < 16) {
+        // The shot lands this frame, at (tx, ty). It used to hit only if it
+        // was already within 16 px before the move, so any frame whose step
+        // was longer than that (2×-10×, low frame rates) dropped the shot.
+        if (targetEnemy) {
           applyProjectileHit(s, p, targetEnemy);
-        } else {
-          if (p.splashRadius > 0) {
-            for (const e of s.enemies) {
-              if (distXY(p.x, p.y, e.x, e.y) <= p.splashRadius) {
-                applyDamageToEnemy(s, e, p.damage, p.critical, 'explosive');
-                applySlow(e, p.slowDurationSec, p.slowMultiplier);
-              }
+        } else if (p.splashRadius > 0) {
+          for (const e of s.enemies) {
+            if (distXY(tx, ty, e.x, e.y) <= p.splashRadius) {
+              applyDamageToEnemy(s, e, p.damage, p.critical, 'explosive');
+              applySlow(e, p.slowDurationSec, p.slowMultiplier);
             }
-            addParticle(s, p.x, p.y, p.color, 12);
           }
+          addParticle(s, tx, ty, p.color, 12);
         }
         s.projectiles.splice(i, 1);
         continue;
@@ -928,6 +917,32 @@ export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'no
     save: persist,
     getScores,
   };
+}
+
+function fireProjectile(s: EngineState, t: TowerInstance, def: TowerDefinition, target: EnemyInstance, range: number) {
+  t.angle = Math.atan2(target.y - t.y, target.x - t.x);
+  const dmg = getTowerDamage(t, s.techs);
+  const isCrit = Math.random() < def.criticalChance;
+  s.projectiles.push({
+    id: uid(),
+    x: t.x, y: t.y,
+    startX: t.x, startY: t.y,
+    targetEnemyId: target.id,
+    targetX: target.x, targetY: target.y,
+    speed: def.projectileSpeed,
+    damage: isCrit ? dmg * def.criticalMultiplier : dmg,
+    projectileType: def.projectileType,
+    splashRadius: def.splashRadius,
+    slowDurationSec: def.slowDurationSec,
+    slowMultiplier: def.slowMultiplier,
+    color: def.accentColor,
+    radius: def.splashRadius > 0 ? 5 : 3,
+    pierceRemaining: def.pierceCount,
+    piercedEnemyIds: [],
+    maxRange: range * 1.5,
+    distanceTraveled: 0,
+    critical: isCrit,
+  });
 }
 
 function applyProjectileHit(s: EngineState, p: ProjectileInstance, e: EnemyInstance) {

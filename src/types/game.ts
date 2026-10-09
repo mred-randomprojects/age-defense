@@ -85,7 +85,7 @@ export interface TowerInstance {
   totalDamageDealt: number;
   totalKills: number;
   targetPriority: TargetPriority;
-  lastShotTime: number; // timestamp ms
+  cooldownRemaining: number; // seconds of game time until it can fire again; negative = shots owed
   angle: number; // radians
   totalInvested: number;
   beamActiveUntil?: number;
