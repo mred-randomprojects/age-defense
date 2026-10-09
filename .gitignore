@@ -22,3 +22,20 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Build scratch
+.tmp/
+*.tsbuildinfo
+
+# Environment and credentials: never committed
+.env
+.env.*
+!.env.example
+*firebase-adminsdk*.json
+*service-account*.json
+*serviceAccount*.json
+*.pem
+*.p12
+
+# Claude Code per-machine settings
+.claude/settings.local.json
