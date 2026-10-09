@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Dark-only: native controls and scrollbars render dark too. */
+:root {
+  color-scheme: dark;
+}
+
 body {
   margin: 0;
   background-color: #09090b;

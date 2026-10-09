@@ -120,6 +120,7 @@ export default function App() {
             <button
               key={d}
               onClick={() => setDifficulty(d)}
+              aria-pressed={difficulty === d}
               className={`px-3 py-1.5 rounded text-sm font-semibold border transition ${
                 difficulty === d
                   ? 'border-white/30 bg-white/10 text-white'
@@ -182,12 +183,13 @@ export default function App() {
         </div>
         <div className="flex items-center gap-3">
           {/* Speed control */}
-          <div className="flex items-center gap-1 bg-slate-800 rounded p-0.5">
-            <Gauge size={14} className="text-slate-400 ml-1.5" />
+          <div role="group" aria-label="Game speed" className="flex items-center gap-1 bg-slate-800 rounded p-0.5">
+            <Gauge size={14} className="text-slate-400 ml-1.5" aria-hidden="true" />
             {SPEEDS.map((s) => (
               <button
                 key={s}
                 onClick={() => engine.setSpeed(s)}
+                aria-pressed={ui.gameSpeed === s}
                 className={`px-2 py-0.5 rounded text-xs font-bold transition ${
                   ui.gameSpeed === s ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
                 }`}
@@ -197,7 +199,12 @@ export default function App() {
             ))}
           </div>
           <div className="text-sm text-slate-400">Score: <span className="text-white font-mono">{formatNumber(ui.score)}</span></div>
-          <button onClick={toggleMute} className="p-1.5 rounded hover:bg-slate-800 text-slate-400">
+          <button
+            onClick={toggleMute}
+            aria-label={muted ? 'Unmute sound' : 'Mute sound'}
+            title={muted ? 'Unmute sound' : 'Mute sound'}
+            className="p-1.5 rounded hover:bg-slate-800 text-slate-400"
+          >
             {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
           </button>
           <button onClick={() => { engine.restart(); setMapPickerOpen(true); }} className="text-xs text-slate-400 hover:text-white underline">
@@ -255,13 +262,19 @@ export default function App() {
                         : <><Play size={16} /> Start Wave</>}
                   </button>
                   {ui.isWaveActive && ui.enemiesRemaining === 0 && (
-                    <button onClick={() => engine.startNextWave()} className="px-2 rounded bg-amber-600 hover:bg-amber-500 text-white">
+                    <button
+                      onClick={() => engine.startNextWave()}
+                      aria-label="Start next wave"
+                      title="Start next wave"
+                      className="px-2 rounded bg-amber-600 hover:bg-amber-500 text-white"
+                    >
                       <SkipForward size={16} />
                     </button>
                   )}
                 </div>
                 <button
                   onClick={() => engine.toggleAutoStart()}
+                  aria-pressed={ui.autoStartWaves}
                   className={`mt-2 w-full py-1.5 rounded text-xs font-semibold flex items-center justify-center gap-1.5 transition ${
                     ui.autoStartWaves
                       ? 'bg-cyan-700 hover:bg-cyan-600 text-white'
