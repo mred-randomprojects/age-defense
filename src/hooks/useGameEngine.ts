@@ -62,6 +62,8 @@ export interface UIState {
   modernizeCost: number;
   autoStartWaves: boolean;
   autoWaveCountdown: number;
+  /** The run in play isn't reaching storage: the last write was refused. */
+  saveFailing: boolean;
 }
 
 interface SpawnTask {
@@ -373,26 +375,37 @@ export interface SaveSummary {
 export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'normal') {
   const stateRef = useRef<EngineState>(initState(mapId, initialDifficulty));
   const speedRef = useRef(1);
-  const [ui, setUi] = useState<UIState>(buildUI(stateRef.current, speedRef.current));
+  /** The last write of the run was refused (storage full or blocked); cleared by the next one that lands. */
+  const saveFailedRef = useRef(false);
+  const [ui, setUi] = useState<UIState>(buildUI(stateRef.current, speedRef.current, false));
   const uiTimerRef = useRef<number>(0);
   const saveTimerRef = useRef<number>(0);
 
+  /** Progress isn't reaching storage, so Resume would bring back an older save. */
+  const isSaveFailing = useCallback(() => saveFailedRef.current && !stateRef.current.finished, []);
+
   const notifyUI = useCallback(() => {
-    setUi(buildUI(stateRef.current, speedRef.current));
-  }, []);
+    setUi(buildUI(stateRef.current, speedRef.current, isSaveFailing()));
+  }, [isSaveFailing]);
 
   /** Write the run. False only when the browser refused the write (storage full or blocked). */
   const persist = useCallback((): boolean => {
     const s = stateRef.current;
     // A finished run is not saved: Resume is for runs that can go on.
     if (s.finished) return true;
+    let ok = true;
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify(serializeState(s)));
-      return true;
     } catch {
-      return false;
+      ok = false;
     }
-  }, []);
+    // Autosaves ignore the result, so the page has to hear about it here.
+    if (saveFailedRef.current === ok) {
+      saveFailedRef.current = !ok;
+      notifyUI();
+    }
+    return ok;
+  }, [notifyUI]);
 
   const recordScore = useCallback((map: string, wave: number, score: number, diff: Difficulty) => {
     try {
@@ -945,6 +958,7 @@ export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'no
      * own. False when the browser refused the write.
      */
     save: persist,
+    isSaveFailing,
     getScores,
   };
 }
@@ -1006,7 +1020,7 @@ function applyDamageToEnemy(s: EngineState, e: EnemyInstance, rawDmg: number, is
   addFloatingText(s, Math.floor(dmg).toString(), e.x + (Math.random() - 0.5) * 10, e.y - e.radius - 6, isCrit ? '#f43f5e' : '#ffffff', isCrit);
 }
 
-function buildUI(s: EngineState, speed: number): UIState {
+function buildUI(s: EngineState, speed: number, saveFailing: boolean): UIState {
   const advanceCost = getAdvanceCost(s.stats.currentAge);
   const selectedTower = s.selectedTowerId ? s.towers.find((t) => t.id === s.selectedTowerId) : null;
   let canModernize = false;
@@ -1050,5 +1064,6 @@ function buildUI(s: EngineState, speed: number): UIState {
     modernizeCost,
     autoStartWaves: s.autoStart,
     autoWaveCountdown: Math.max(0, s.autoWaveTimer),
+    saveFailing,
   };
 }

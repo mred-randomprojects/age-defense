@@ -179,6 +179,39 @@ describe('saving', () => {
     expect(engine.save()).toBe(false);
   });
 
+  it('says progress isn’t being saved while autosaves are refused, until one lands', () => {
+    const engine = mountEngine();
+    engine.startNextWave(); // saves the run
+    expect(engine.isSaveFailing()).toBe(false);
+    const staleSave = localStorage.getItem(SAVE_KEY);
+
+    // Another app on the origin filled the shared quota.
+    const refuse = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    });
+    runFrames(engine, 6); // past an autosave, with no action from the player
+    expect(refuse).toHaveBeenCalled();
+    expect(engine.isSaveFailing()).toBe(true);
+    expect(localStorage.getItem(SAVE_KEY)).toBe(staleSave);
+
+    refuse.mockRestore(); // space freed
+    runFrames(engine, 6);
+    expect(engine.isSaveFailing()).toBe(false);
+    expect(localStorage.getItem(SAVE_KEY)).not.toBe(staleSave);
+  });
+
+  it('stops saying so once the run is over, since an ended run is not saved', () => {
+    const engine = mountEngine();
+    vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+      throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    });
+    expect(engine.save()).toBe(false);
+    expect(engine.isSaveFailing()).toBe(true);
+    engine.stateRef.current.stats.lives = 0; // lost
+    runFrames(engine, 0.1);
+    expect(engine.isSaveFailing()).toBe(false);
+  });
+
   it('a won run records its score once, drops the save and stops saving', () => {
     const engine = mountEngine('twin_canyons');
     engine.save();

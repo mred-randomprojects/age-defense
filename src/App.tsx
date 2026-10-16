@@ -239,6 +239,14 @@ export default function App() {
         </div>
       </div>
 
+      {/* Autosaves don't report failures on their own: say it until a save lands. */}
+      {ui.saveFailing && (
+        <div role="alert" className="px-4 py-1.5 bg-rose-950 border-b border-rose-800 text-rose-200 text-xs text-center shrink-0">
+          Progress isn&apos;t being saved: the browser&apos;s storage for this site is full or blocked, so Resume would
+          bring back an older save. This goes away as soon as a save gets through.
+        </div>
+      )}
+
       {/* Main area */}
       <div className="flex flex-1 min-h-0">
         {/* Canvas */}
