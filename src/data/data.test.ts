@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AGE_ORDER, AGES, getNextAge } from './ages';
+import { AGE_ORDER, AGES, getAdvanceCost, getNextAge } from './ages';
 import { ENEMIES } from './enemies';
 import { MAPS } from './maps';
 import { INITIAL_TECHS } from './tech';
@@ -115,5 +115,15 @@ describe('techs and ages', () => {
       expect(AGES[age].id).toBe(age);
       expect(AGES[age].abilityCooldownSec, age).toBeGreaterThan(0);
     }
+  });
+
+  it('price every advance with the era being left, and none out of the final one', () => {
+    for (const age of AGE_ORDER.slice(0, -1)) {
+      const price = getAdvanceCost(age);
+      expect(price, age).toEqual({ gold: AGES[age].costGold, science: AGES[age].costScience });
+      expect(price?.gold, age).toBeGreaterThan(0);
+      expect(price?.science, age).toBeGreaterThan(0);
+    }
+    expect(getAdvanceCost('cyber')).toBeNull();
   });
 });

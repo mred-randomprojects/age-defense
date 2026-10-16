@@ -4,7 +4,7 @@ import {
   MapDefinition, ParticleInstance, Point, ProjectileInstance,
   TargetPriority, TechUpgrade, TowerDefinition, TowerInstance,
 } from '../types/game';
-import { AGES, getNextAge } from '../data/ages';
+import { AGES, getAdvanceCost, getNextAge } from '../data/ages';
 import { TOWERS } from '../data/towers';
 import { ENEMIES } from '../data/enemies';
 import { MAPS } from '../data/maps';
@@ -516,11 +516,12 @@ export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'no
   const advanceAge = useCallback(() => {
     const s = stateRef.current;
     const next = getNextAge(s.stats.currentAge);
-    if (!next) return false;
+    const price = getAdvanceCost(s.stats.currentAge);
+    if (!next || !price) return false;
+    if (s.stats.gold < price.gold || s.stats.science < price.science) return false;
+    s.stats.gold -= price.gold;
+    s.stats.science -= price.science;
     const ageDef = AGES[next];
-    if (s.stats.gold < ageDef.costGold || s.stats.science < ageDef.costScience) return false;
-    s.stats.gold -= ageDef.costGold;
-    s.stats.science -= ageDef.costScience;
     s.stats.currentAge = next;
     s.abilityMaxCooldown = ageDef.abilityCooldownSec;
     s.abilityCooldown = 0;
@@ -977,8 +978,7 @@ function applyDamageToEnemy(s: EngineState, e: EnemyInstance, rawDmg: number, is
 }
 
 function buildUI(s: EngineState, speed: number): UIState {
-  const next = getNextAge(s.stats.currentAge);
-  const ageDef = next ? AGES[next] : null;
+  const advanceCost = getAdvanceCost(s.stats.currentAge);
   const selectedTower = s.selectedTowerId ? s.towers.find((t) => t.id === s.selectedTowerId) : null;
   let canModernize = false;
   let modernizeCost = 0;
@@ -1003,9 +1003,9 @@ function buildUI(s: EngineState, speed: number): UIState {
     currentAge: s.stats.currentAge,
     selectedTowerId: s.selectedTowerId,
     isWaveActive: s.waveActive,
-    canAdvanceAge: !!next && s.stats.gold >= (ageDef?.costGold ?? Infinity) && s.stats.science >= (ageDef?.costScience ?? Infinity),
-    advanceCostGold: ageDef?.costGold ?? 0,
-    advanceCostScience: ageDef?.costScience ?? 0,
+    canAdvanceAge: !!advanceCost && s.stats.gold >= advanceCost.gold && s.stats.science >= advanceCost.science,
+    advanceCostGold: advanceCost?.gold ?? 0,
+    advanceCostScience: advanceCost?.science ?? 0,
     enemiesRemaining: s.enemies.length,
     techs: s.techs,
     gameOver: s.stats.lives <= 0,

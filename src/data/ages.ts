@@ -68,3 +68,13 @@ export function getNextAge(current: AgeId): AgeId | null {
   }
   return null;
 }
+
+/**
+ * What advancing out of `current` costs: the price on `current`'s own entry,
+ * not on the next age's (the final age's 0 / 0 would make it free). Null in
+ * the final age.
+ */
+export function getAdvanceCost(current: AgeId): { gold: number; science: number } | null {
+  if (!getNextAge(current)) return null;
+  return { gold: AGES[current].costGold, science: AGES[current].costScience };
+}

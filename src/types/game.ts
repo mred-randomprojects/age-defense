@@ -8,6 +8,7 @@ export interface AgeDefinition {
   borderColor: string;
   description: string;
   eraYear: string;
+  /** Price of advancing out of this age into the next one (0 in the final age). */
   costGold: number;
   costScience: number;
   abilityName: string;

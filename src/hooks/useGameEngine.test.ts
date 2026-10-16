@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clock, installTestEnvironment, mountEngine, placeDummy, runFrames } from '../test/engineHarness';
+import { AGES } from '../data/ages';
 import { TOWERS } from '../data/towers';
 import { WAVES } from '../data/waves';
+import { AgeId } from '../types/game';
 
 vi.mock('react', () => import('../test/fakeReact'));
 
@@ -33,6 +35,51 @@ describe('a new run', () => {
     engine.startNextWave();
     runFrames(engine, 8);
     expect(engine.stateRef.current.stats.enemiesKilled).toBeGreaterThan(0);
+  });
+});
+
+describe('advancing an era', () => {
+  it('charges each advance the price listed on the era being left, Stone through Cyber', () => {
+    const engine = mountEngine();
+    const s = engine.stateRef.current;
+    const paid: [AgeId, number, number][] = [];
+    for (let i = 0; i < 3; i++) {
+      s.stats.gold = 1e5;
+      s.stats.science = 1e5;
+      const from = s.stats.currentAge;
+      expect(engine.advanceAge()).toBe(true);
+      paid.push([from, 1e5 - s.stats.gold, 1e5 - s.stats.science]);
+    }
+    expect(s.stats.currentAge).toBe('cyber');
+    expect(paid).toEqual(
+      (['stone', 'medieval', 'modern'] as const).map((age) => [age, AGES[age].costGold, AGES[age].costScience]),
+    );
+    for (const [age, gold, science] of paid) {
+      expect(gold, age).toBeGreaterThan(0);
+      expect(science, age).toBeGreaterThan(0);
+    }
+    expect(engine.advanceAge()).toBe(false); // the final era
+  });
+
+  it('does not give the Cyber Future away', () => {
+    const engine = mountEngine();
+    const s = engine.stateRef.current;
+    s.stats.currentAge = 'modern';
+    s.stats.gold = 0;
+    s.stats.science = 0;
+    expect(engine.advanceAge()).toBe(false);
+    s.stats.gold = AGES.modern.costGold - 1;
+    s.stats.science = 1e5;
+    expect(engine.advanceAge()).toBe(false);
+    s.stats.gold = 1e5;
+    s.stats.science = AGES.modern.costScience - 1;
+    expect(engine.advanceAge()).toBe(false);
+    expect(s.stats.currentAge).toBe('modern');
+  });
+
+  it('shows the price it will charge', () => {
+    const { ui } = mountEngine();
+    expect([ui.advanceCostGold, ui.advanceCostScience]).toEqual([AGES.stone.costGold, AGES.stone.costScience]);
   });
 });
 
