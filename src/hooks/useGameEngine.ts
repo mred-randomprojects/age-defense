@@ -764,6 +764,21 @@ export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'no
         if (Math.random() < 0.15) addFloatingText(s, Math.floor(burnDmg).toString(), e.x, e.y - e.radius - 4, '#f97316');
       }
 
+      // Dead before it moves or leaks: an enemy killed in the frame it
+      // stepped onto the base (a shot landing after it moved) is a kill,
+      // not a lost life.
+      if (e.currentHealth <= 0) {
+        s.stats.gold += Math.floor(e.goldReward * getTechMultiplier(s.techs, 'tech_bounty'));
+        s.stats.science += e.scienceReward;
+        s.stats.score += e.isBoss ? e.goldReward * 10 : e.goldReward * 2;
+        s.stats.enemiesKilled++;
+        sounds.playEnemyDeath(e.isBoss);
+        addParticle(s, e.x, e.y, e.color, e.isBoss ? 20 : 10);
+        s.enemies.splice(i, 1);
+        notifyUI();
+        continue;
+      }
+
       if (e.pathIndex < e.pathCoords.length - 1) {
         // Walk the whole step, past as many waypoints as it reaches. Stopping
         // at each one dropped the rest of the step, so enemies were slower on
@@ -798,18 +813,6 @@ export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'no
           notifyUI();
           return;
         }
-        continue;
-      }
-
-      if (e.currentHealth <= 0) {
-        s.stats.gold += Math.floor(e.goldReward * getTechMultiplier(s.techs, 'tech_bounty'));
-        s.stats.science += e.scienceReward;
-        s.stats.score += e.isBoss ? e.goldReward * 10 : e.goldReward * 2;
-        s.stats.enemiesKilled++;
-        sounds.playEnemyDeath(e.isBoss);
-        addParticle(s, e.x, e.y, e.color, e.isBoss ? 20 : 10);
-        s.enemies.splice(i, 1);
-        notifyUI();
         continue;
       }
     }

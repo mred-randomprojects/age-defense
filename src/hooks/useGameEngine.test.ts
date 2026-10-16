@@ -221,6 +221,50 @@ describe('saving', () => {
   });
 });
 
+describe('an enemy at the base', () => {
+  /** The first enemy of wave 1, put on the base tile with `health` left. */
+  function enemyAtTheBase(health: number) {
+    const engine = mountEngine();
+    engine.startNextWave();
+    runFrames(engine, 0.1);
+    const s = engine.stateRef.current;
+    const enemy = s.enemies[0];
+    enemy.pathIndex = enemy.pathCoords.length - 1;
+    enemy.currentHealth = health;
+    const before = { lives: s.stats.lives, gold: s.stats.gold, kills: s.stats.enemiesKilled };
+    return { engine, s, enemy, before };
+  }
+
+  it('killed on the frame it stepped onto the base counts as a kill, not a leak', () => {
+    // A shot landed later in the frame in which it reached the last waypoint.
+    const { engine, s, enemy, before } = enemyAtTheBase(0);
+    engine.update(1 / 60);
+    expect(s.enemies).not.toContain(enemy);
+    expect(s.stats.lives).toBe(before.lives);
+    expect(s.stats.enemiesKilled).toBe(before.kills + 1);
+    expect(s.stats.gold).toBe(before.gold + enemy.goldReward);
+  });
+
+  it('burned to death there counts as a kill too', () => {
+    const { engine, s, enemy, before } = enemyAtTheBase(1);
+    enemy.burnTimeRemaining = 1;
+    enemy.burnDps = 1000;
+    engine.update(1 / 60);
+    expect(s.enemies).not.toContain(enemy);
+    expect(s.stats.lives).toBe(before.lives);
+    expect(s.stats.enemiesKilled).toBe(before.kills + 1);
+  });
+
+  it('still alive there costs a life and pays nothing', () => {
+    const { engine, s, enemy, before } = enemyAtTheBase(10);
+    engine.update(1 / 60);
+    expect(s.enemies).not.toContain(enemy);
+    expect(s.stats.lives).toBe(before.lives - 1);
+    expect(s.stats.enemiesKilled).toBe(before.kills);
+    expect(s.stats.gold).toBe(before.gold);
+  });
+});
+
 describe('game speed', () => {
   // A grass tile on Verdant Valley with open ground to its right.
   const SPOT = { col: 10, row: 4 };
