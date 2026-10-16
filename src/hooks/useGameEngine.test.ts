@@ -132,6 +132,26 @@ describe('save and resume', () => {
     expect(after.stateRef.current.map.id).toBe('twin_canyons');
   });
 
+  it('summarises the saved run, for the question before a new run replaces it', () => {
+    const engine = mountEngine();
+    expect(engine.getSaveSummary()).toBeNull();
+    engine.restart('hard', 'twin_canyons');
+    engine.startNextWave(); // saves the run
+    expect(engine.getSaveSummary()).toEqual({
+      mapName: 'Twin Canyons',
+      difficulty: 'hard',
+      wave: 1,
+      totalWaves: WAVES.length,
+    });
+  });
+
+  it('has no summary for a save it cannot read, which still counts as a save', () => {
+    localStorage.setItem('age-defense-save-v1', '{"mapId":');
+    const engine = mountEngine();
+    expect(engine.hasSave()).toBe(true);
+    expect(engine.getSaveSummary()).toBeNull();
+  });
+
   it('auto-start keeps starting waves after resuming between waves', () => {
     const before = mountEngine();
     before.toggleAutoStart(); // saves the run

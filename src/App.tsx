@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { interceptSave } from 'cmd-s';
-import { useGameEngine, HighScores } from './hooks/useGameEngine';
+import { useGameEngine, HighScores, SaveSummary } from './hooks/useGameEngine';
 import { GameCanvas } from './components/GameCanvas';
 import { TOWERS } from './data/towers';
 import { AGES, getNextAge } from './data/ages';
@@ -30,6 +30,18 @@ const DIFFICULTY_META: Record<Difficulty, { label: string; color: string }> = {
 
 const SPEEDS = [1, 2, 3, 5, 10] as const;
 
+/** Asked before a new run replaces the saved one, which can't be brought back afterwards. */
+function replaceRunQuestion(saved: SaveSummary | null): string {
+  const which = saved
+    ? ` (${saved.mapName}, ${DIFFICULTY_META[saved.difficulty]?.label ?? saved.difficulty}, wave ${saved.wave}/${saved.totalWaves})`
+    : '';
+  return `Start a new run? It replaces your saved run${which}, and that can't be undone.`;
+}
+
+const EXIT_UNSAVED =
+  "This run couldn't be saved: the browser's storage is full or blocked. " +
+  'If you leave now, Resume brings back an older save, or none. Leave anyway?';
+
 export default function App() {
   const [selectedMap, setSelectedMap] = useState(MAPS_LIST[0]);
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
@@ -55,6 +67,8 @@ export default function App() {
   const selectedTower = ui.selectedTowerId ? ui.towers.find((t) => t.id === ui.selectedTowerId) : null;
 
   const startGame = (map: string, diff: Difficulty) => {
+    // A new run deletes the saved one for good: ask first.
+    if (engine.hasSave() && !window.confirm(replaceRunQuestion(engine.getSaveSummary()))) return;
     setSelectedMap(map);
     setDifficulty(diff);
     setMapPickerOpen(false);
@@ -67,6 +81,14 @@ export default function App() {
   const resumeGame = () => {
     const ok = engine.loadSave();
     if (ok) setMapPickerOpen(false);
+  };
+
+  // Exit keeps the run for Resume; only starting a new run replaces it. If
+  // the run can't be written, leaving would lose it, so ask.
+  const exitToPicker = () => {
+    if (!engine.save() && !window.confirm(EXIT_UNSAVED)) return;
+    setPlacingTowerId(null);
+    setMapPickerOpen(true);
   };
 
   // ⌘S / Ctrl+S: save the run instead of the web page. The engine already
@@ -207,7 +229,11 @@ export default function App() {
           >
             {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
           </button>
-          <button onClick={() => { engine.restart(); setMapPickerOpen(true); }} className="text-xs text-slate-400 hover:text-white underline">
+          <button
+            onClick={exitToPicker}
+            title="Back to the map picker. A run still in play stays saved for Resume Last Run."
+            className="text-xs text-slate-400 hover:text-white underline"
+          >
             Exit
           </button>
         </div>

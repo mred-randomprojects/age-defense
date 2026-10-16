@@ -362,6 +362,14 @@ export interface HighScores {
   [mapId: string]: { bestWave: number; bestScore: number; difficulty: Difficulty };
 }
 
+export interface SaveSummary {
+  mapName: string;
+  difficulty: Difficulty;
+  /** The last wave started; 0 before the first. */
+  wave: number;
+  totalWaves: number;
+}
+
 export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'normal') {
   const stateRef = useRef<EngineState>(initState(mapId, initialDifficulty));
   const speedRef = useRef(1);
@@ -633,6 +641,23 @@ export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'no
       return !!localStorage.getItem(SAVE_KEY);
     } catch {
       return false;
+    }
+  }, []);
+
+  /** Where the saved run stands, to say what a new run would replace. Null when there is none or it can't be read. */
+  const getSaveSummary = useCallback((): SaveSummary | null => {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return null;
+      const data: SaveData = JSON.parse(raw);
+      return {
+        mapName: MAPS.find((m) => m.id === data.mapId)?.name ?? data.mapId,
+        difficulty: data.difficulty,
+        wave: data.stats.currentWave,
+        totalWaves: WAVES.length,
+      };
+    } catch {
+      return null;
     }
   }, []);
 
@@ -911,6 +936,7 @@ export function useGameEngine(mapId: string, initialDifficulty: Difficulty = 'no
     restart,
     loadSave,
     hasSave,
+    getSaveSummary,
     /**
      * Write the run to disk now, between the moments the engine does it on its
      * own. False when the browser refused the write.
